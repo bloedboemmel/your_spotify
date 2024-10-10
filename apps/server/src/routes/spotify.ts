@@ -24,7 +24,7 @@ import {
   getCollaborativeBestArtists,
   getCollaborativeBestSongs,
 } from "../database/queries/collaborative";
-import { dateToDaysMonthsYear, intervalToDisplay } from "../tools/date";
+import { DateFormatter, intervalToDisplay } from "../tools/date";
 import { logger } from "../tools/logger";
 import {
   isLoggedOrGuest,
@@ -343,6 +343,7 @@ const intervalPerSchemaNbOffset = z.object({
   ),
   nb: z.preprocess(toNumber, z.number().min(1).max(30)),
   offset: z.preprocess(toNumber, z.number().min(0).default(0)),
+  sortKey: z.string().default("count"),
 });
 
 router.get(
@@ -351,7 +352,7 @@ router.get(
   isLoggedOrGuest,
   async (req, res) => {
     const { user } = req as LoggedRequest;
-    const { start, end, nb, offset } = req.query as TypedPayload<
+    const { start, end, nb, offset, sortKey } = req.query as TypedPayload<
       typeof intervalPerSchemaNbOffset
     >;
 
@@ -378,7 +379,7 @@ router.get(
   isLoggedOrGuest,
   async (req, res) => {
     const { user } = req as LoggedRequest;
-    const { start, end, nb, offset } = req.query as TypedPayload<
+    const { start, end, nb, offset, sortKey } = req.query as TypedPayload<
       typeof intervalPerSchemaNbOffset
     >;
 
@@ -405,7 +406,7 @@ router.get(
   isLoggedOrGuest,
   async (req, res) => {
     const { user } = req as LoggedRequest;
-    const { start, end, nb, offset } = req.query as TypedPayload<
+    const { start, end, nb, offset, sortKey } = req.query as TypedPayload<
       typeof intervalPerSchemaNbOffset
     >;
 
@@ -602,6 +603,7 @@ router.get("/playlists", logged, withHttpClient, async (req, res) => {
 const createPlaylistBase = z.object({
   playlistId: z.string().optional(),
   name: z.string().optional(),
+  sortKey: z.string().default("count"),
 });
 
 const createPlaylistFromTop = z.object({
@@ -658,7 +660,7 @@ router.post(
       let playlistName = body.name;
       let spotifyIds: string[];
       if (body.type === "top") {
-        const { interval: intervalData, nb } = body;
+        const { interval: intervalData, nb, sortKey } = body;
         const items = await getBest(
           ItemType.track,
           user,
@@ -670,15 +672,14 @@ router.post(
         spotifyIds = items.map(item => item.track.id);
         if (!playlistName) {
           playlistName = `Top songs • ${intervalToDisplay(
+            user.settings.dateFormat,
             intervalData.start,
             intervalData.end,
           )}`;
         }
       } else if (body.type === "affinity") {
         if (!playlistName) {
-          playlistName = `Your Spotify Playlist • ${dateToDaysMonthsYear(
-            new Date(),
-          )}`;
+          playlistName = `Your Spotify Playlist • ${DateFormatter.toDayMonthYear(user.settings.dateFormat, new Date())}`;
         }
         const affinity = await getCollaborativeBestSongs(
           body.userIds,
@@ -690,9 +691,7 @@ router.post(
         spotifyIds = affinity.map(item => item.track.id);
       } else {
         if (!playlistName) {
-          playlistName = `Your Spotify Playlist • ${dateToDaysMonthsYear(
-            new Date(),
-          )}`;
+          playlistName = `Your Spotify Playlist • ${DateFormatter.toDayMonthYear(user.settings.dateFormat, new Date())}`;
         }
         spotifyIds = [body.songId];
       }
